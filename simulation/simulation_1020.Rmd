@@ -1,7 +1,7 @@
 ---
 title: "Fall 2019 Lab Rotation Simulation"
 author: "Jiayi (Jessie) Tong"
-date: "10/13/2019"
+date: "10/20/2019"
 output: html_document
 ---
 ### Aim of this file
@@ -36,168 +36,158 @@ library("devtools")
 
 ```{r warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
 library("SymSim")
-ngenes = 2000
-# number of gene for each cell is 2000 (based on last discussion
-# we would like to set this to 20,000.
-# To decrease the computational time, I set the number to 2000 as for now.)
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, # total number of cells
-                                      min_popsize=200, # size of the smallest pop
-                                      i_minpop=1, # specify which pop is smallest
+###########
+ngenes = 1000
+true_counts_res <- SimulateTrueCounts(ncells_total=2000,
+                                      min_popsize=200, #number of cells in the rarest population
+                                      randseed = 0, # random seed to reproduce the results
                                       ngenes=ngenes, # number of genes
-                                      nevf=10, # number of EVFs for each kinetic parameter
-                                      evf_type="discrete", # sub-population
-                                      n_de_evf=9, # number of differential evfs between populations for one kinetic parameter
-                                      scale_s = 0.2, # the cell size parameter
-                                      vary="s", # which kinetic parameters have differential evfs
-                                      Sigma=0.5, # the smaller, the higher the hetero
-                                      phyla=Phyla3(), # tree to define relationship between populations
-                                      randseed=0)
-tsne_true_counts <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
-tsne_true_counts[[2]]
-```
-
-#### 1. Different scale_s: the cell size parameter
-
-```{r warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
-                                      min_popsize=200, 
-                                      i_minpop=1, 
-                                      ngenes=ngenes, 
-                                      nevf=10,
-                                      evf_type="discrete", 
-                                      n_de_evf=9,
-                                      scale_s = 0.8, #!!!!!!! change here
-                                      vary="s",
-                                      Sigma=0.5,
-                                      phyla=Phyla3(),
-                                      randseed=0)
-tsne_true_counts_1 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
-grid.arrange(tsne_true_counts[[2]],
-             tsne_true_counts_1[[2]],
-             ncol=2, nrow = 1)
-```
-
-$\color{red}{\text{1. How to specify three different proportions of three different groups?}}$
-
-
-$\color{red}{\text{2. scale_s is the cell size parameter. I used 0.2 and 0.8 in the above two figures, how to explain this parameter corresponsing to the figures?}}$
-
-#### 2. Different "nevf": number of EVFs for each kinetic parameter
-
-```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
-ngenes = 2000
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
-                                      min_popsize=200, 
-                                      i_minpop=1,
-                                      ngenes=ngenes, 
-                                      nevf=20, #!!!!!!! change here
-                                      evf_type="discrete", 
-                                      n_de_evf=9,
-                                      scale_s = 0.2, 
-                                      vary="s",
-                                      Sigma=0.5,
-                                      phyla=Phyla3(),
-                                      randseed=0)
-tsne_true_counts_2 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
-grid.arrange(tsne_true_counts[[2]],
-             tsne_true_counts_2[[2]],
-             ncol=2, nrow = 1)
-```
-
-
-#### 3. Different "n_de_evf": number of differential evfs between populations for one kinetic parameter
-
-```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
-ngenes = 2000
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
-                                      min_popsize=200, 
-                                      i_minpop=1,
-                                      ngenes=ngenes, 
-                                      nevf=10, 
-                                      evf_type="discrete", 
-                                      n_de_evf=4, #!!!!!!! change here
-                                      scale_s = 0.2,
-                                      vary="s",
-                                      Sigma=0.5,
-                                      phyla=Phyla3(),
-                                      randseed=0)
-tsne_true_counts_3 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
-grid.arrange(tsne_true_counts[[2]],
-             tsne_true_counts_3[[2]],
-             ncol=2, nrow = 1)
-```
-
-#### 4. Different "vary": which kinetic parameters have differential evfs
-
-```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
-ngenes = 2000
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
-                                      min_popsize=200, 
-                                      i_minpop=1,
-                                      ngenes=ngenes, 
-                                      nevf=10, 
-                                      evf_type="discrete", 
-                                      n_de_evf=9, 
-                                      scale_s = 0.2,
-                                      vary="all", #!!!!!!! change here
-                                      Sigma=0.5,
-                                      phyla=Phyla3(),
-                                      randseed=0)
-tsne_true_counts_4 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
-grid.arrange(tsne_true_counts[[2]],
-             tsne_true_counts_4[[2]],
-             ncol=2, nrow = 1)
-```
-
-
-#### 5. Different number of population: Phyla3() -> Phyla4()
-
-```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
-ngenes = 2000
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
-                                      min_popsize=200, 
-                                      i_minpop=1, 
-                                      ngenes=ngenes,
-                                      nevf=10,
+                                      phyla=rtree(7),
                                       evf_type="discrete",
-                                      n_de_evf=9,
-                                      scale_s = 0.2,
-                                      vary="s",
-                                      Sigma=0.5,
-                                      phyla=Phyla4(), #!!!!!!! change here
-                                      randseed=0)
+                                      scale_s = 0.9,
+                                      nevf=30,
+                                      Sigma=0.1,
+                                      n_de_evf=10) 
+
+tsne_true_counts <- PlotTsne(meta=true_counts_res[[3]], 
+                             data=log2(true_counts_res[[1]]+1), 
+                             evf_type="discrete", 
+                             n_pc=20, label='pop', 
+                             saving = F, 
+                             plotname="Total - 7 pops")
+
+# plot of true counts with 7 different cells population
+tsne_true_counts[[2]]
+
+# extract cell-meta from true_counts_res
+cell_meta = true_counts_res$cell_meta
+
+# Pooled data: check the number of cells in each population
+table(cell_meta[,2])
+
+data(gene_len_pool)
+gene_len <- sample(gene_len_pool[which(gene_len_pool < 200)], ngenes, replace = FALSE)
+
+# Start the clock! -----------------------------
+ptm <- proc.time()
+
+observed_counts <- True2ObservedCounts(true_counts=true_counts_res[[1]], 
+                                       meta_cell=true_counts_res[[3]], 
+                                       protocol="nonUMI", 
+                                       alpha_mean=0.1, 
+                                       alpha_sd=0.05, 
+                                       gene_len=gene_len, 
+                                       depth_mean=1e5, 
+                                       depth_sd=3e3,
+                                       nbatch = 4)
+
+# Stop the clock ----------------------------
+proc.time() - ptm
+
+# plot the combined population from four different batches
+PlotTsne(meta=observed_counts[[2]], 
+         data=log2(observed_counts[[1]]+1),
+         evf_type="7.population", 
+         n_pc=20, 
+         label='pop', 
+         saving = F, 
+         plotname="7.population")[[2]]
+
+# funtion to divide the batch and population based on the combined data
+batch_divider <- function(batch_id, batch_name, size_batch_num){
+  
+  # extract the batch with batch_id from the whole population
+  batch_id = which(observed_counts[[2]]$batch == batch_id)
+  
+  # based on the id, extract the cell meta
+  batch_observed_cell_meta = observed_counts[[2]][batch_id,]
+  
+  # print the cell meta information
+  batch_cell_meta_dim = dim(batch_observed_cell_meta) 
+  
+  # based on the id, extract the observed counts
+  batch_observed_counts = observed_counts[[1]][,batch_id]
+  
+  # print the count information
+  batch_count_dim = dim(batch_observed_counts) 
+  
+  # extract the batch with size_batch_num: 
+  # e.g., batch 1 has three pop, batch 2 has 4 pop, batch 3 has 5 pop, batch 4 has 7 pop
+  batch_sub_id = batch_observed_cell_meta$pop %in% c(1:size_batch_num)
+  
+  # based on the batch sub id, extract the cell meta
+  batch_observed_cell_meta_sub = batch_observed_cell_meta[batch_sub_id,]
+  
+  # print the cell meta sub information
+  batch_cell_meta_dim_sub = dim(batch_observed_cell_meta_sub) 
+  
+  # based on the sub id, extract the observed counts
+  batch_observed_counts_sub = batch_observed_counts[,batch_sub_id]
+  
+  # print the counbt information
+  batch_count_dim_sub = dim(batch_observed_counts_sub) 
+  
+  # plot the cells population, subgroup 3 populations
+  tsne_true_counts = PlotTsne(meta=batch_observed_cell_meta_sub, 
+                              data=log2(batch_observed_counts_sub+1),
+                              evf_type=paste("Batch", batch_name, size_batch_num,"population"), 
+                              n_pc=20, 
+                              label='pop', 
+                              saving = F, 
+                              plotname=paste("Batch", batch_name, size_batch_num,"population"))
+  
+  return(list(tsne = tsne_true_counts,
+              batch_observed_cell_meta_sub = batch_observed_cell_meta_sub,
+              batch_cell_meta_dim_sub = batch_cell_meta_dim_sub,
+              batch_observed_counts_sub = batch_observed_counts_sub,
+              batch_count_dim_sub = batch_count_dim_sub))
+}
+
+########################################
+# Bacth one: with three cell populations
+batch1 = batch_divider(batch_id = 1,
+                       batch_name = "One",
+                       size_batch_num = 3)
+# plot
+batch1$tsne[[2]]
+
+# calculate the proportion of each population
+round(table(batch1$batch_observed_cell_meta_sub[,2])/
+  sum(table(batch1$batch_observed_cell_meta_sub[,2])),2)
+
+########################################
+# Bacth two: with four cell populations
+batch2 = batch_divider(batch_id = 2,
+                       batch_name = "Two",
+                       size_batch_num = 4)
+batch2$tsne[[2]]
+
+# calculate the proportion of each population
+round(table(batch2$batch_observed_cell_meta_sub[,2])/
+        sum(table(batch2$batch_observed_cell_meta_sub[,2])),2)
+
+########################################
+# Bacth three: with five cell populations
+batch3 = batch_divider(batch_id = 3,
+                       batch_name = "Three",
+                       size_batch_num = 5)
+batch3$tsne[[2]]
+
+# calculate the proportion of each population
+round(table(batch3$batch_observed_cell_meta_sub[,2])/
+        sum(table(batch3$batch_observed_cell_meta_sub[,2])),2)
+
+########################################
+# Bacth four: with seven cell populations
+batch4 = batch_divider(batch_id = 4,
+                       batch_name = "Four",
+                       size_batch_num = 7)
+batch4$tsne[[2]]
+
+# calculate the proportion of each population
+round(table(batch4$batch_observed_cell_meta_sub[,2])/
+        sum(table(batch4$batch_observed_cell_meta_sub[,2])),2)
 ```
-
-$\color{red}{\text{3. Phyla4() does not exit when creating an example tree with 4 tips}}$
-
-#### 6. When I do the similar thing for Batch Two (5 cell populations), 
-
-
-```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
-ngenes = 2000
-true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
-                                      min_popsize=200, 
-                                      i_minpop=1,
-                                      ngenes=ngenes, 
-                                      nevf=10, 
-                                      evf_type="discrete", 
-                                      n_de_evf=9, 
-                                      scale_s = 0.2,
-                                      vary="s", 
-                                      Sigma=0.5,
-                                      phyla=Phyla5(), #!!!!!!! change here
-                                      randseed=0)
-tsne_true_counts_6 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch Three - 5 pops")
-grid.arrange(tsne_true_counts[[2]],
-             tsne_true_counts_6[[2]],
-             ncol=2, nrow = 1)
-```
-
-
-$\color{red}{\text{4. How to make sure the cells are simulated for the same cell population?}}$
-
-I know that in each Batch, the cell types are controlled by the number of EVFs (i.e., nEVFs) representing dimension of the latent space of cell identify (length of EVF vectors). Values of EVFs are sampled from N($\mu, \sigma^2$) for each subpopulation, where default value of $\mu$ is 1, and $\sigma$ determines the within-population variation. For multiple populations, users input a tree phyla, and the $\mu$ for each population is generated along the tree
-
 
 
 ### References:
