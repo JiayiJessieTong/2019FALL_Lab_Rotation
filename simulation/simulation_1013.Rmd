@@ -1,0 +1,207 @@
+---
+title: "Fall 2019 Lab Rotation Simulation"
+author: "Jiayi (Jessie) Tong"
+date: "10/13/2019"
+output: html_document
+---
+### Aim of this file
+
+This R markdown file is written to simulate the single-cell data to demonstrate if the order of the batch when applying mutual nearest neighbors (MNN) would affect the clustering results. 
+
+### Simulation Design
+
+In this simulation study, we are going to simulate four different batches to mimic the temporal from week 0 to week 24. As time goes on, the observed cell population increases. In Figure 1, we present the idea of the simulated data. In each batch, there are different numbers of cell populations: 3, 4, 5, and 7. There exist batch effects among the cell populations 1, 2, 3, 4 and 5 across four batches.   
+
+
+![Figure 1](/Users/jiayito/Dropbox/000_Penn_Phd/2019_Fall/2019_Fall_Rotation/simulation/sim_design.png)
+
+### R package to be used: Symsim
+
+To simulate the data, we are going to use Symsim package, which is one most recently published R package for simulating multiple faceted variability in single cell RND sequencing data.
+
+```{r "setup", include=FALSE}
+require("knitr")
+require(gridExtra)
+opts_chunk$set(fig.width=4, fig.height=3)
+```
+
+
+```{r, message=F, warning=FALSE, eval=FALSE}
+# Install SymSim
+library("devtools")
+# devtools::install_github('YosefLab/SymSim')
+```
+
+#### 0. Original
+
+```{r warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+library("SymSim")
+ngenes = 2000
+# number of gene for each cell is 2000 (based on last discussion
+# we would like to set this to 20,000.
+# To decrease the computational time, I set the number to 2000 as for now.)
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, # total number of cells
+                                      min_popsize=200, # size of the smallest pop
+                                      i_minpop=1, # specify which pop is smallest
+                                      ngenes=ngenes, # number of genes
+                                      nevf=10, # number of EVFs for each kinetic parameter
+                                      evf_type="discrete", # sub-population
+                                      n_de_evf=9, # number of differential evfs between populations for one kinetic parameter
+                                      scale_s = 0.2, # the cell size parameter
+                                      vary="s", # which kinetic parameters have differential evfs
+                                      Sigma=0.5, # the smaller, the higher the hetero
+                                      phyla=Phyla3(), # tree to define relationship between populations
+                                      randseed=0)
+tsne_true_counts <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
+tsne_true_counts[[2]]
+```
+
+#### 1. Different scale_s: the cell size parameter
+
+```{r warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
+                                      min_popsize=200, 
+                                      i_minpop=1, 
+                                      ngenes=ngenes, 
+                                      nevf=10,
+                                      evf_type="discrete", 
+                                      n_de_evf=9,
+                                      scale_s = 0.8, #!!!!!!! change here
+                                      vary="s",
+                                      Sigma=0.5,
+                                      phyla=Phyla3(),
+                                      randseed=0)
+tsne_true_counts_1 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
+grid.arrange(tsne_true_counts[[2]],
+             tsne_true_counts_1[[2]],
+             ncol=2, nrow = 1)
+```
+
+$\color{red}{\text{1. How to specify three different proportions of three different groups?}}$
+
+
+$\color{red}{\text{2. scale_s is the cell size parameter. I used 0.2 and 0.8 in the above two figures, how to explain this parameter corresponsing to the figures?}}$
+
+#### 2. Different "nevf": number of EVFs for each kinetic parameter
+
+```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+ngenes = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
+                                      min_popsize=200, 
+                                      i_minpop=1,
+                                      ngenes=ngenes, 
+                                      nevf=20, #!!!!!!! change here
+                                      evf_type="discrete", 
+                                      n_de_evf=9,
+                                      scale_s = 0.2, 
+                                      vary="s",
+                                      Sigma=0.5,
+                                      phyla=Phyla3(),
+                                      randseed=0)
+tsne_true_counts_2 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
+grid.arrange(tsne_true_counts[[2]],
+             tsne_true_counts_2[[2]],
+             ncol=2, nrow = 1)
+```
+
+
+#### 3. Different "n_de_evf": number of differential evfs between populations for one kinetic parameter
+
+```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+ngenes = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
+                                      min_popsize=200, 
+                                      i_minpop=1,
+                                      ngenes=ngenes, 
+                                      nevf=10, 
+                                      evf_type="discrete", 
+                                      n_de_evf=4, #!!!!!!! change here
+                                      scale_s = 0.2,
+                                      vary="s",
+                                      Sigma=0.5,
+                                      phyla=Phyla3(),
+                                      randseed=0)
+tsne_true_counts_3 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
+grid.arrange(tsne_true_counts[[2]],
+             tsne_true_counts_3[[2]],
+             ncol=2, nrow = 1)
+```
+
+#### 4. Different "vary": which kinetic parameters have differential evfs
+
+```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+ngenes = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
+                                      min_popsize=200, 
+                                      i_minpop=1,
+                                      ngenes=ngenes, 
+                                      nevf=10, 
+                                      evf_type="discrete", 
+                                      n_de_evf=9, 
+                                      scale_s = 0.2,
+                                      vary="all", #!!!!!!! change here
+                                      Sigma=0.5,
+                                      phyla=Phyla3(),
+                                      randseed=0)
+tsne_true_counts_4 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch One - 3 pops")
+grid.arrange(tsne_true_counts[[2]],
+             tsne_true_counts_4[[2]],
+             ncol=2, nrow = 1)
+```
+
+
+#### 5. Different number of population: Phyla3() -> Phyla4()
+
+```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+ngenes = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
+                                      min_popsize=200, 
+                                      i_minpop=1, 
+                                      ngenes=ngenes,
+                                      nevf=10,
+                                      evf_type="discrete",
+                                      n_de_evf=9,
+                                      scale_s = 0.2,
+                                      vary="s",
+                                      Sigma=0.5,
+                                      phyla=Phyla4(), #!!!!!!! change here
+                                      randseed=0)
+```
+
+$\color{red}{\text{3. Phyla4() does not exit when creating an example tree with 4 tips}}$
+
+#### 6. When I do the similar thing for Batch Two (5 cell populations), 
+
+
+```{r error=TRUE,warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=10,fig.height=6}
+ngenes = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=1000, 
+                                      min_popsize=200, 
+                                      i_minpop=1,
+                                      ngenes=ngenes, 
+                                      nevf=10, 
+                                      evf_type="discrete", 
+                                      n_de_evf=9, 
+                                      scale_s = 0.2,
+                                      vary="s", 
+                                      Sigma=0.5,
+                                      phyla=Phyla5(), #!!!!!!! change here
+                                      randseed=0)
+tsne_true_counts_6 <- PlotTsne(meta=true_counts_res[[3]], data=log2(true_counts_res[[1]]+1), evf_type="discrete", n_pc=20, label='pop', saving = F, plotname="Batch Three - 5 pops")
+grid.arrange(tsne_true_counts[[2]],
+             tsne_true_counts_6[[2]],
+             ncol=2, nrow = 1)
+```
+
+
+$\color{red}{\text{4. How to make sure the cells are simulated for the same cell population?}}$
+
+I know that in each Batch, the cell types are controlled by the number of EVFs (i.e., nEVFs) representing dimension of the latent space of cell identify (length of EVF vectors). Values of EVFs are sampled from N($\mu, \sigma^2$) for each subpopulation, where default value of $\mu$ is 1, and $\sigma$ determines the within-population variation. For multiple populations, users input a tree phyla, and the $\mu$ for each population is generated along the tree
+
+
+
+### References:
+
+Haghverdi, Laleh, et al. "Batch effects in single-cell RNA-sequencing data are corrected by matching mutual nearest neighbors." Nature biotechnology 36.5 (2018): 421.
+
+Zhang, Xiuwei, Chenling Xu, and Nir Yosef. "Simulating multiple faceted variability in single cell RNA sequencing." Nature communications 10.1 (2019): 2611.
