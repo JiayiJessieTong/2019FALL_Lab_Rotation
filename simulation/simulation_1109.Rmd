@@ -1,0 +1,506 @@
+---
+title: "2019 Fall Rotation Simulation"
+author: "Jiayi (Jessie) Tong"
+date: "11/09/2019"
+output: html_document
+---
+### Aim of this file
+
+This R markdown file is written to simulate the single-cell data to demonstrate if the order of the batch when applying mutual nearest neighbors (MNN) would affect the clustering results. 
+
+### Simulation Design
+
+In this simulation study, we are going to simulate four different batches to mimic the temporal from week 0 to week 24. As time goes on, the observed cell population increases. In Figure 1, we present the idea of the simulated data. In each batch, there are different numbers of cell populations: 3, 4, 5, and 7. There exist batch effects among the cell populations 1, 2, 3, 4 and 5 across four batches.   
+
+
+![Figure 1](/Users/jiayito/Dropbox/000_Penn_Phd/2019_Fall/2019_Fall_Rotation/simulation/sim_design.png)
+
+### R package to be used: Symsim
+
+To simulate the data, we are going to use Symsim package, which is one most recently published R package for simulating multiple faceted variability in single cell RND sequencing data.
+
+```{r "setup", include=FALSE}
+require("knitr")
+require(gridExtra)
+# Install SymSim
+library("devtools")
+# devtools::install_github("YosefLab/SymSim")
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install("batchelor")
+# BiocManager::install("scater")
+library("devtools")
+library("SymSim")
+library("ape")
+library(batchelor)
+library(scater)
+library(Rtsne)
+library(scran)
+opts_chunk$set(fig.width=4, fig.height=3)
+```
+
+
+#### Simulation
+
+```{r warning=FALSE,message=FALSE,results = 'hide',fig.align='center',fig.width=6,fig.height=4}
+###########
+###########
+ngenes = 200
+ncells_total = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=ncells_total,
+                                      min_popsize=200, #number of cells in the rarest population
+                                      randseed = 0, # random seed to reproduce the results
+                                      ngenes=ngenes, # number of genes
+                                      phyla=rtree(7),
+                                      evf_type="discrete",
+                                      scale_s = 0.9,
+                                      nevf=30,
+                                      Sigma=0.1,
+                                      n_de_evf=10)
+
+## print the proprotion of zeroes in the true counts data
+sum(true_counts_res[[1]] == 0)/(ngenes * ncells_total)
+
+# plot
+tsne_true_counts <- PlotTsne(meta=true_counts_res[[3]],
+                             data=log2(true_counts_res[[1]]+1),
+                             evf_type="discrete",
+                             n_pc=20, label='pop',
+                             saving = F,
+                             plotname="Total - 7 pops")
+
+# plot of true counts with 7 different cells population
+tsne_true_counts[[2]]
+
+# extract cell-meta from true_counts_res
+cell_meta = true_counts_res$cell_meta
+
+# Pooled data: check the number of cells in each population
+print(table(cell_meta[,2]))
+
+data(gene_len_pool)
+# function
+extract_batch <- function(id_list, num_batch){
+  
+  # extract the population with the id I want
+  id = c(true_counts_res[[3]]$pop %in% id_list)
+  
+  # extract the meta_cell info with the id
+  meta_cell = true_counts_res[[3]][id,]
+  
+  # extract the true_counts info with the id
+  true_counts = true_counts_res[[1]][,id]
+  
+  # get the observed counts with function True2ObservedCounts
+  # num_batch is the number of batches that the id_list (cell population) has
+  gene_len <- sample(gene_len_pool, ngenes, replace = FALSE)
+  
+  observed_counts <- True2ObservedCounts(true_counts=true_counts,
+                                         meta_cell=meta_cell,
+                                         protocol="UMI",
+                                         alpha_mean=0.1,
+                                         alpha_sd=0.05,
+                                         gene_len=gene_len,
+                                         depth_mean=1e5,
+                                         depth_sd=3e3,
+                                         nbatch = num_batch)
+  
+  
+  return(observed_counts)
+}
+
+
+pop123 = extract_batch(c(1,2,3), 4)
+pop4 = extract_batch(c(4), 3)
+pop5 = extract_batch(c(5), 2)
+pop67 = extract_batch(c(6,7), 1)
+
+```
+
+```{r fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth one: with three cell populations
+batch1_id = which(pop123$cell_meta$batch == 1)
+batch1_meta = pop123[[2]][batch1_id,]
+batch1_count = pop123[[1]][,batch1_id]
+
+## print the proprotion of zeroes in the observed data
+sum(batch1_count == 0)/(dim(batch1_count)[1] * dim(batch1_count)[2])
+
+
+# # proportion of each population: number of cells in each pop / total number of cells
+print(paste("The proportions of three cells pop are",
+            round(table(batch1_meta$pop) / dim(batch1_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch1_sce <- SingleCellExperiment(
+  assays = list(counts = batch1_count,
+                logcounts = log2(batch1_count+1))
+) 
+
+batch1_tsne <- runTSNE(batch1_sce)
+batch1_tsne$batch <- factor(rep(c(1), dim(batch1_sce)[2]))
+batch1_tsne$cell_type <- factor(batch1_meta[,2])
+plotTSNE(batch1_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch1_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+
+```
+
+```{r fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth two: with four cell populations
+batch2_id = which(pop123$cell_meta$batch == 2)
+batch2_id_2 = which(pop4$cell_meta$batch == 1)
+batch2_meta = rbind(pop123[[2]][batch2_id,], pop4[[2]][batch2_id_2,])
+batch2_count = cbind(pop123[[1]][,batch2_id], pop4[[1]][,batch2_id_2])
+
+## print the proprotion of zeroes in the observed data
+sum(batch2_count == 0)/(dim(batch2_count)[1] * dim(batch2_count)[2])
+
+
+# proportion of each population: number of cells in each pop / total number of cells
+print(paste("The proportions of four cells pop are",
+            round(table(batch2_meta$pop) / dim(batch2_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch2_sce <- SingleCellExperiment(
+  assays = list(counts = batch2_count,
+                logcounts = log2(batch2_count+1))
+) 
+
+batch2_tsne <- runTSNE(batch2_sce)
+batch2_tsne$batch <- factor(rep(c(2), dim(batch2_sce)[2]))
+batch2_tsne$cell_type <- factor(batch2_meta[,2])
+plotTSNE(batch2_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch2_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+
+```
+
+```{r fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth three: with five cell populations
+batch3_id = which(pop123$cell_meta$batch == 3)
+batch3_id_2 = which(pop4$cell_meta$batch == 2)
+batch3_id_3 = which(pop5$cell_meta$batch == 1)
+batch3_meta = rbind(pop123[[2]][batch3_id,],
+                    pop4[[2]][batch3_id_2,],
+                    pop5[[2]][batch3_id_3,])
+batch3_count = cbind(pop123[[1]][,batch3_id],
+                     pop4[[1]][,batch3_id_2],
+                     pop5[[1]][,batch3_id_3])
+
+## print the proprotion of zeroes in the observed data
+sum(batch3_count == 0)/(dim(batch3_count)[1] * dim(batch3_count)[2])
+
+# proportion of each population: number of cells in each pop / total number of cells
+print(paste("The proportions of five cells pop are",
+            round(table(batch3_meta$pop) / dim(batch3_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch3_sce <- SingleCellExperiment(
+  assays = list(counts = batch3_count,
+                logcounts = log2(batch3_count+1))
+) 
+
+batch3_tsne <- runTSNE(batch3_sce)
+batch3_tsne$batch <- factor(rep(c(3), dim(batch3_sce)[2]))
+batch3_tsne$cell_type <- factor(batch3_meta[,2])
+plotTSNE(batch3_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch3_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+
+```
+
+```{r fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth four: with seven cell populations
+batch4_id = which(pop123$cell_meta$batch == 4)
+batch4_id_2 = which(pop4$cell_meta$batch == 3)
+batch4_id_3 = which(pop5$cell_meta$batch == 2)
+batch4_id_4 = which(pop67$cell_meta$batch == 1)
+batch4_meta = rbind(pop123[[2]][batch4_id,],
+                    pop4[[2]][batch4_id_2,],
+                    pop5[[2]][batch4_id_3,],
+                    pop67[[2]][batch4_id_4,])
+batch4_count = cbind(pop123[[1]][,batch4_id],
+                     pop4[[1]][,batch4_id_2],
+                     pop5[[1]][,batch4_id_3],
+                     pop67[[1]][,batch4_id_4])
+## print the proprotion of zeroes in the observed data
+sum(batch4_count == 0)/(dim(batch4_count)[1] * dim(batch4_count)[2])
+
+# proportion of each population: number of cells in each pop / total number of cells
+print(paste("The proportions of seven cells pop are",
+            round(table(batch4_meta$pop) / dim(batch4_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch4_sce <- SingleCellExperiment(
+  assays = list(counts = batch4_count,
+                logcounts = log2(batch4_count+1))
+) 
+
+batch4_tsne <- runTSNE(batch4_sce)
+batch4_tsne$batch <- factor(rep(c(4), dim(batch4_sce)[2]))
+batch4_tsne$cell_type <- factor(batch4_meta[,2])
+plotTSNE(batch4_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch4_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+
+
+```
+
+```{r fig.align='center',fig.width=6,fig.height=4}
+#########################################################
+#########################################################
+logcounts_1 <- log2(batch1_count + 1)
+logcounts_2 <- log2(batch2_count + 1)
+logcounts_3 <- log2(batch3_count + 1)
+logcounts_4 <- log2(batch4_count + 1)
+
+########## combine batch 1 and batch 2 without correction
+#########################################################
+########## WITHOUT CORRECTION
+#########################################################
+batch12_sce <- SingleCellExperiment(
+  assays = list(counts = cbind(batch1_count, batch2_count),
+                logcounts = log2(cbind(batch1_count, batch2_count)+1))
+) 
+
+# tsne
+batch12_tsne <- runTSNE(batch12_sce)
+batch12_tsne$batch <- factor(rep(c(1,2), 
+                                c(ncol(logcounts_1), 
+                                  ncol(logcounts_2))))
+batch12_tsne$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
+plotTSNE(batch12_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch12_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+# pca
+batch12_pca <- runPCA(batch12_sce)
+batch12_pca$batch <- factor(rep(c(1,2), 
+                                 c(ncol(logcounts_1), 
+                                   ncol(logcounts_2))))
+batch12_pca$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
+plotPCA(batch12_pca, run_args=list(perplexity = 10), colour_by = "batch")
+plotPCA(batch12_pca, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+
+# #########################################################
+# ########## WITH CORRECTION： MNN
+# #########################################################
+#### 1 -------------------------------------
+out1 <- mnnCorrect(logcounts_1, logcounts_2)
+counts(out1) <- assay(out1)
+logcounts(out1) <- assay(out1)
+
+
+# tsne
+out1_tsne <- runTSNE(out1)
+out1_tsne$batch <- factor(rep(1:2, c(ncol(logcounts_1), 
+                                ncol(logcounts_2))))
+out1_tsne$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
+plotTSNE(out1_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(out1_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+# pca
+out1_pca <- runPCA(out1)
+out1_pca$batch <- factor(rep(1:2, c(ncol(logcounts_1), 
+                                ncol(logcounts_2))))
+out1_pca$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
+plotPCA(out1_pca, run_args=list(perplexity = 10), colour_by = "batch")
+plotPCA(out1_pca, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+#### 2 -------------------------------------
+out12 <- mnnCorrect(logcounts_2, logcounts_1)
+counts(out12) <- assay(out12)
+logcounts(out12) <- assay(out12)
+
+# tsne
+out12_tsne <- runTSNE(out12)
+out12_tsne$batch <- factor(rep(1:2, c(ncol(logcounts_1), 
+                                ncol(logcounts_2))))
+out12_tsne$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
+plotTSNE(out12_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(out12_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+# pca
+out12_pca <- runPCA(out12)
+out12_pca$batch <- factor(rep(1:2, c(ncol(logcounts_1), 
+                                ncol(logcounts_2))))
+out12_pca$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
+plotPCA(out12_pca, run_args=list(perplexity = 10), colour_by = "batch")
+plotPCA(out12_pca, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+## corrected count matrix
+m1 <- out1@assays@data@listData[["corrected"]]
+m12 <- out12@assays@data@listData[["corrected"]]
+
+# Frobeius norm a matrix
+norm(m1-m12, type = "F")
+
+```
+
+<!-- ```{r} -->
+<!-- ########## combine batch 1, batch 2, batch3 without correction -->
+<!-- ######################################################### -->
+<!-- ########## WITHOUT CORRECTION -->
+<!-- ######################################################### -->
+<!-- batch123_sce <- SingleCellExperiment( -->
+<!--   assays = list(counts = cbind(batch1_count, batch2_count, batch3_count), -->
+<!--                 logcounts = log2(cbind(batch1_count, batch2_count, batch3_count)+1)) -->
+<!-- )  -->
+<!-- # tsne -->
+<!-- batch123_tsne <- runTSNE(batch123_sce) -->
+<!-- batch123_tsne$batch <- factor(rep(c(1,2,3),  -->
+<!--                                  c(ncol(logcounts_1),  -->
+<!--                                    ncol(logcounts_2), -->
+<!--                                    ncol(logcounts_3)))) -->
+<!-- batch123_tsne$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                     batch2_meta[,2], -->
+<!--                                     batch3_meta[,2])) -->
+<!-- plotTSNE(batch123_tsne, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- plotTSNE(batch123_tsne, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+<!-- # # pca -->
+<!-- # batch123_pca <- runPCA(batch123_sce) -->
+<!-- # batch123_pca$batch <- factor(rep(c(1,2,3),  -->
+<!-- #                                   c(ncol(logcounts_1),  -->
+<!-- #                                     ncol(logcounts_2), -->
+<!-- #                                     ncol(logcounts_3)))) -->
+<!-- # batch123_pca$cell_type <- factor(c(batch1_meta[,2],  -->
+<!-- #                                     batch2_meta[,2], -->
+<!-- #                                     batch3_meta[,2])) -->
+<!-- # plotPCA(batch123_pca, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- # plotPCA(batch123_pca, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+
+
+<!-- # ######################################################### -->
+<!-- # ########## WITH CORRECTION： MNN -->
+<!-- # ######################################################### -->
+<!-- out2 <- mnnCorrect(logcounts_1, logcounts_2, logcounts_3) -->
+<!-- out22 <- mnnCorrect(logcounts_3, logcounts_2, logcounts_1) -->
+<!-- out23 <- mnnCorrect(logcounts_2, logcounts_3, logcounts_1) -->
+
+<!-- ## corrected count matrix -->
+<!-- m2 <- out2@assays@data@listData[["corrected"]] -->
+<!-- m22 <- out22@assays@data@listData[["corrected"]] -->
+<!-- m23 <- out23@assays@data@listData[["corrected"]] -->
+
+<!-- # Frobeius norm a matrix -->
+<!-- norm(m2-m22, type = "F") -->
+<!-- norm(m22-m23, type = "F") -->
+<!-- norm(m2-m23, type = "F") -->
+
+
+<!-- counts(out2) <- assay(out2) -->
+<!-- logcounts(out2) <- assay(out2) -->
+
+<!-- # tsne -->
+<!-- out2_tsne <- runTSNE(out2) -->
+<!-- out2_tsne$batch <- factor(rep(1:3, c(ncol(logcounts_1),  -->
+<!--                                      ncol(logcounts_2), -->
+<!--                                      ncol(logcounts_3)))) -->
+<!-- out2_tsne$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                 batch2_meta[,2], -->
+<!--                                 batch3_meta[,2])) -->
+<!-- plotTSNE(out2_tsne, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- plotTSNE(out2_tsne, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+<!-- # pca -->
+<!-- out2_pca <- runPCA(out2) -->
+<!-- out2_pca$batch <- factor(rep(1:3, c(ncol(logcounts_1),  -->
+<!--                                     ncol(logcounts_2), -->
+<!--                                     ncol(logcounts_3)))) -->
+<!-- out2_pca$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                batch2_meta[,2], -->
+<!--                                batch3_meta[,2])) -->
+<!-- plotPCA(out2_pca, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- plotPCA(out2_pca, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- ########## combine batch 1, batch 2, batch3, batch 4 without correction -->
+<!-- ######################################################### -->
+<!-- ########## WITHOUT CORRECTION -->
+<!-- ######################################################### -->
+<!-- batch1234_sce <- SingleCellExperiment( -->
+<!--   assays = list(counts = cbind(batch1_count, batch2_count, batch3_count, -->
+<!--                                batch4_count), -->
+<!--                 logcounts = log2(cbind(batch1_count, batch2_count,  -->
+<!--                                        batch3_count, batch4_count)+1)) -->
+<!-- )  -->
+
+
+<!-- # tsne -->
+<!-- batch1234_tsne <- runTSNE(batch1234_sce) -->
+<!-- batch1234_tsne$batch <- factor(rep(c(1,2,3,4),  -->
+<!--                                    c(ncol(logcounts_1),  -->
+<!--                                      ncol(logcounts_2), -->
+<!--                                      ncol(logcounts_3), -->
+<!--                                      ncol(logcounts_4)))) -->
+<!-- batch1234_tsne$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                     batch2_meta[,2], -->
+<!--                                     batch3_meta[,2], -->
+<!--                                     batch4_meta[,2])) -->
+<!-- plotTSNE(batch1234_tsne, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- plotTSNE(batch1234_tsne, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+<!-- # pca -->
+<!-- batch1234_tsne <- runPCA(batch1234_sce) -->
+<!-- batch1234_tsne$batch <- factor(rep(c(1,2,3,4),  -->
+<!--                                  c(ncol(logcounts_1),  -->
+<!--                                    ncol(logcounts_2), -->
+<!--                                    ncol(logcounts_3), -->
+<!--                                    ncol(logcounts_4)))) -->
+<!-- batch1234_tsne$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                    batch2_meta[,2], -->
+<!--                                    batch3_meta[,2], -->
+<!--                                    batch4_meta[,2])) -->
+<!-- plotPCA(batch1234_tsne, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- plotPCA(batch1234_tsne, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+
+
+
+<!-- # ######################################################### -->
+<!-- # ########## WITH CORRECTION： MNN -->
+<!-- # ######################################################### -->
+<!-- out3 <- mnnCorrect(logcounts_1, logcounts_2, logcounts_3, logcounts_4) -->
+<!-- counts(out3) <- assay(out3) -->
+<!-- logcounts(out3) <- assay(out3) -->
+
+<!-- # tsne -->
+<!-- out3_tsne <- runTSNE(out3) -->
+<!-- out3_tsne$batch <- factor(rep(1:4, c(ncol(logcounts_1),  -->
+<!--                                      ncol(logcounts_2), -->
+<!--                                      ncol(logcounts_3), -->
+<!--                                      ncol(logcounts_4)))) -->
+<!-- out3_tsne$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                 batch2_meta[,2], -->
+<!--                                 batch3_meta[,2], -->
+<!--                                 batch4_meta[,2])) -->
+<!-- plotTSNE(out3_tsne, run_args=list(perplexity = 10), colour_by = "batch") -->
+<!-- plotTSNE(out3_tsne, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+
+<!-- # pca -->
+<!-- out3_pca <- runPCA(out3) -->
+<!-- out3_pca$batch <- factor(rep(1:4,  c(ncol(logcounts_1),  -->
+<!--                                      ncol(logcounts_2), -->
+<!--                                      ncol(logcounts_3), -->
+<!--                                      ncol(logcounts_4)))) -->
+<!-- out3_pca$cell_type <- factor(c(batch1_meta[,2],  -->
+<!--                                 batch2_meta[,2], -->
+<!--                                 batch3_meta[,2], -->
+<!--                                 batch4_meta[,2])) -->
+<!-- plotPCA(out3_pca, run_args=list(perplexity = 10), colour_by = "cell_type") -->
+<!-- ``` -->
+
+### References:
+
+Haghverdi, Laleh, et al. "Batch effects in single-cell RNA-sequencing data are corrected by matching mutual nearest neighbors." Nature biotechnology 36.5 (2018): 421.
+
+Zhang, Xiuwei, Chenling Xu, and Nir Yosef. "Simulating multiple faceted variability in single cell RNA sequencing." Nature communications 10.1 (2019): 2611.
