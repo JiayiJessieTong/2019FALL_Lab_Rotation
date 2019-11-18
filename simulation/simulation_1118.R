@@ -26,10 +26,10 @@ seurat_workflow <- function(count_matrix, cellType_info, batch_info){
   data_seurat <- FindVariableFeatures(data_seurat, selection.method = "vst", nfeatures = 2000)
   data_seurat <- RunPCA(data_seurat, features = VariableFeatures(object = data_seurat))
   data_seurat <- FindNeighbors(data_seurat, dims = 1:10)
-  data_seurat <- FindClusters(data_seurat, resolution = 0.5)
+  data_seurat <- FindClusters(data_seurat, resolution = 1.5)
   data_seurat <- RunUMAP(data_seurat, dims = 1:10)
   
-  n1 = length(levels(data_seurat@meta.data[["RNA_snn_res.0.5"]]))
+  n1 = length(levels(data_seurat@meta.data[["seurat_clusters"]]))
   c1 = distinctColorPalette(n1)
   # clustering
   p1 = DimPlot(data_seurat, reduction = "umap", cols = c1)
@@ -279,314 +279,6 @@ logcounts_2 <- log2(batch2_count + 1)
 logcounts_3 <- log2(batch3_count + 1)
 logcounts_4 <- log2(batch4_count + 1)
 
-# ########## combine batch 1 and batch 2 without correction
-# #########################################################
-# ########## WITHOUT CORRECTION
-# #########################################################
-# batch12_sce <- SingleCellExperiment(
-#   assays = list(counts = cbind(batch1_count, batch2_count),
-#                 logcounts = log2(cbind(batch1_count, batch2_count)+1))
-# ) 
-# 
-# # tsne
-# batch12_tsne <- runTSNE(batch12_sce)
-# batch12_tsne$batch <- factor(rep(c(1,2), 
-#                                  c(ncol(logcounts_1), 
-#                                    ncol(logcounts_2))))
-# batch12_tsne$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
-# plotTSNE(batch12_tsne, run_args=list(perplexity = 10), colour_by = "batch")
-# plotTSNE(batch12_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
-# 
-# # clustering analysis
-# batch12_tsne_count_matrix = batch12_tsne@assays@data@listData[["counts"]]
-# colnames(batch12_tsne_count_matrix) = as.character(c(1:dim(batch12_tsne_count_matrix)[2]))
-# row.names(batch12_tsne_count_matrix) = as.character(c(1:ngenes))
-# # seurat_workflow(count_matrix = batch12_tsne_count_matrix)
-# r = seurat_workflow(count_matrix = batch12_tsne_count_matrix,
-#                 cellType_info =
-#                   c(batch1_meta[,2], batch2_meta[,2]) - 1,
-#                 batch_info = c(batch1_meta$batch, batch2_meta$batch))
-# grid.newpage()
-# grid.draw(r$plot)
-# 
-# 
-# # #########################################################
-# # ########## WITH CORRECTION： MNN
-# # #########################################################
-# # option 1
-# out1 <- mnnCorrect(logcounts_1, logcounts_2)
-# counts(out1) <- out1@assays@data@listData[["corrected"]]
-# logcounts(out1) <- log2(out1@assays@data@listData[["corrected"]] + 1)
-# 
-# # tsne
-# out1_tsne <- runTSNE(out1)
-# out1_tsne$batch <- factor(rep(1:2, c(ncol(logcounts_1), 
-#                                      ncol(logcounts_2))))
-# out1_tsne$cell_type <- factor(c(batch1_meta[,2], batch2_meta[,2]))
-# plotTSNE(out1_tsne, run_args=list(perplexity = 10), colour_by = "batch")
-# plotTSNE(out1_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
-# 
-# # clustering analysis
-# out1_count_matrix = out1@assays@data@listData[["corrected"]]
-# 
-# # proportion of negative numbers in the corrected count matrix
-# length(which(out1_count_matrix<0))/length(out1_count_matrix)
-# 
-# colnames(out1_count_matrix) = as.character(c(1:dim(out1_count_matrix)[2]))
-# row.names(out1_count_matrix) = as.character(c(1:ngenes))
-# # seurat_workflow(count_matrix = out1_count_matrix)
-# r = seurat_workflow(count_matrix = out1_count_matrix,
-#                 cellType_info =
-#                   c(batch1_meta[,2], batch2_meta[,2]) - 1,
-#                 batch_info = c(batch1_meta$batch, batch2_meta$batch))
-# grid.newpage()
-# grid.draw(r$plot)
-# 
-# # option 2
-# out2 <- mnnCorrect(logcounts_2, logcounts_1)
-# counts(out2) <- out2@assays@data@listData[["corrected"]]
-# logcounts(out2) <- log2(out2@assays@data@listData[["corrected"]] + 1)
-# 
-# #### check similar
-# par(mfrow = c(1,2))
-# # batch1
-# check_similar_1 = out1@assays@data@listData[["corrected"]][1:ncol(logcounts_1),]
-# check_similar_2 = out2@assays@data@listData[["corrected"]][1:ncol(logcounts_1),]
-# row_mean_1 = apply(check_similar_1, 1, mean)
-# row_mean_2 = apply(check_similar_2, 1, mean)
-# plot(row_mean_1, row_mean_2, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 2",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# 
-# # batch2
-# check_similar_1 = out1@assays@data@listData[["corrected"]][1:ncol(logcounts_2),]
-# check_similar_2 = out2@assays@data@listData[["corrected"]][1:ncol(logcounts_2),]
-# row_mean_1 = apply(check_similar_1, 1, mean)
-# row_mean_2 = apply(check_similar_2, 1, mean)
-# plot(row_mean_1, row_mean_2, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 2",
-#      main = "Batch 2")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# par(mfrow = c(1,1))
-# 
-# 
-# ########## combine batch 1, batch 2, batch3 without correction
-# #########################################################
-# ########## WITHOUT CORRECTION
-# #########################################################
-# batch123_sce <- SingleCellExperiment(
-#   assays = list(counts = cbind(batch1_count, batch2_count, batch3_count),
-#                 logcounts = log2(cbind(batch1_count, batch2_count, batch3_count)+1))
-# ) 
-# # tsne
-# batch123_tsne <- runTSNE(batch123_sce)
-# batch123_tsne$batch <- factor(rep(c(1,2,3), 
-#                                   c(ncol(logcounts_1), 
-#                                     ncol(logcounts_2),
-#                                     ncol(logcounts_3))))
-# batch123_tsne$cell_type <- factor(c(batch1_meta[,2], 
-#                                     batch2_meta[,2],
-#                                     batch3_meta[,2]))
-# plotTSNE(batch123_tsne, run_args=list(perplexity = 10), colour_by = "batch")
-# plotTSNE(batch123_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
-# 
-# # clustering analysis
-# batch123_tsne_count_matrix = batch123_tsne@assays@data@listData[["counts"]]
-# colnames(batch123_tsne_count_matrix) = as.character(c(1:dim(batch123_tsne_count_matrix)[2]))
-# row.names(batch123_tsne_count_matrix) = as.character(c(1:ngenes))
-# # seurat_workflow(count_matrix = batch123_tsne_count_matrix)
-# 
-# r = seurat_workflow(count_matrix = batch123_tsne_count_matrix,
-#                 cellType_info =
-#                   c(batch1_meta[,2], batch2_meta[,2],
-#                     batch3_meta[,2]) - 1,
-#                 batch_info = c(batch1_meta$batch, batch2_meta$batch,
-#                                batch3_meta$batch))
-# grid.newpage()
-# grid.draw(r$plot)
-# 
-# 
-# 
-# 
-# # #########################################################
-# # ########## WITH CORRECTION： MNN
-# # #########################################################
-# # function
-# three_func <- function(l1, l2, l3,
-#                        batch_list,
-#                        batch_num_list,
-#                        batch_meta_list,
-#                        batch_info){
-#   out <- mnnCorrect(l1, l2, l3)
-#   counts(out) <- out@assays@data@listData[["corrected"]]
-#   logcounts(out) <- log2(out@assays@data@listData[["corrected"]] + 1)
-#   
-#   # tsne
-#   out_tsne <- runTSNE(out)
-#   out_tsne$batch <- factor(rep(batch_list, batch_num_list))
-#   out_tsne$cell_type <- factor(batch_meta_list)
-#   plot1 = plotTSNE(out_tsne, run_args=list(perplexity = 10), colour_by = "batch")
-#   plot2 = plotTSNE(out_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
-#   
-#   
-#   # clustering analysis
-#   out_count_matrix = out@assays@data@listData[["corrected"]]
-#   colnames(out_count_matrix) = as.character(c(1:dim(out_count_matrix)[2]))
-#   row.names(out_count_matrix) = as.character(c(1:ngenes))
-#   plot3 = seurat_workflow(count_matrix = out_count_matrix,
-#                           cellType_info = batch_meta_list,
-#                           batch_info = batch_info)
-#   
-#   return(list(tsne_batch = plot1, 
-#               tsne_cell_type = plot2, 
-#               clustering = plot3,
-#               correct_count = out_count_matrix))
-# }
-# ############## RUN three different options
-# ncol_list = c(ncol(logcounts_1), ncol(logcounts_2), ncol(logcounts_3))
-# # option 1
-# list_1 = c(1,2,3)
-# batch_num_list_1 = ncol_list[list_1]
-# meta_list_1 = c(batch1_meta[,2], 
-#                 batch2_meta[,2],
-#                 batch3_meta[,2])
-# batch_info_1 = c(batch1_meta$batch,
-#                batch2_meta$batch,
-#                batch3_meta$batch)
-# option1 <- three_func(logcounts_1,
-#                       logcounts_2,
-#                       logcounts_3,
-#                       list_1,
-#                       batch_num_list_1,
-#                       meta_list_1,
-#                       batch_info = batch_info_1)
-# option1$tsne_batch
-# option1$tsne_cell_type
-# r = option1$clustering
-# grid.newpage()
-# grid.draw(r$plot)
-# # m1 <- option1$correct_count
-# 
-# # option 2
-# list_2 = c(2,3,1)
-# batch_num_list_2 = ncol_list[list_2]
-# meta_list_2 =  c(batch2_meta[,2], 
-#                  batch3_meta[,2],
-#                  batch1_meta[,2])
-# batch_info_2 = c(batch2_meta$batch,
-#                batch3_meta$batch,
-#                batch1_meta$batch)
-# option2 <- three_func(logcounts_2,
-#                       logcounts_3,
-#                       logcounts_1,
-#                       list_2,
-#                       batch_num_list_2,
-#                       meta_list_2,
-#                       batch_info = batch_info_2)
-# option2$tsne_batch
-# option2$tsne_cell_type
-# r = option2$clustering
-# grid.newpage()
-# grid.draw(r$plot)
-# # m2 <- option2$correct_count
-# 
-# # option 3
-# list_3 = c(3,2,1)
-# batch_num_list_3 = ncol_list[list_3]
-# meta_list_3 =  c(batch3_meta[,2], 
-#                  batch2_meta[,2],
-#                  batch1_meta[,2])
-# batch_info_3 = c(batch3_meta$batch,
-#                  batch2_meta$batch,
-#                  batch1_meta$batch)
-# option3 <- three_func(logcounts_3,
-#                       logcounts_2,
-#                       logcounts_1,
-#                       list_3,
-#                       batch_num_list_3,
-#                       meta_list_3,
-#                       batch_info = batch_info_3)
-# option3$tsne_batch
-# option3$tsne_cell_type
-# r = option3$clustering
-# grid.newpage()
-# grid.draw(r$plot)
-# 
-# #### check similar
-# par(mfrow = c(1,3))
-# # batch1
-# check_similar_1 = option1$correct_count[1:ncol(logcounts_1),]
-# check_similar_2 = option2$correct_count[1:ncol(logcounts_1),]
-# check_similar_3 = option3$correct_count[1:ncol(logcounts_1),]
-# row_mean_1 = apply(check_similar_1, 1, mean)
-# row_mean_2 = apply(check_similar_2, 1, mean)
-# row_mean_3 = apply(check_similar_1, 1, mean)
-# plot(row_mean_1, row_mean_2, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 2",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# plot(row_mean_1, row_mean_3, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 3",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# plot(row_mean_2, row_mean_3, 
-#      xlab = "Order option 2",
-#      ylab = "Order option 3",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# 
-# # batch2
-# check_similar_1 = option1$correct_count[1:ncol(logcounts_2),]
-# check_similar_2 = option2$correct_count[1:ncol(logcounts_2),]
-# check_similar_3 = option3$correct_count[1:ncol(logcounts_2),]
-# row_mean_1 = apply(check_similar_1, 1, mean)
-# row_mean_2 = apply(check_similar_2, 1, mean)
-# row_mean_3 = apply(check_similar_1, 1, mean)
-# plot(row_mean_1, row_mean_2, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 2",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# plot(row_mean_1, row_mean_3, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 3",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# plot(row_mean_2, row_mean_3, 
-#      xlab = "Order option 2",
-#      ylab = "Order option 3",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# 
-# # batch2
-# check_similar_1 = option1$correct_count[1:ncol(logcounts_3),]
-# check_similar_2 = option2$correct_count[1:ncol(logcounts_3),]
-# check_similar_3 = option3$correct_count[1:ncol(logcounts_3),]
-# row_mean_1 = apply(check_similar_1, 1, mean)
-# row_mean_2 = apply(check_similar_2, 1, mean)
-# row_mean_3 = apply(check_similar_1, 1, mean)
-# plot(row_mean_1, row_mean_2, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 2",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# plot(row_mean_1, row_mean_3, 
-#      xlab = "Order option 1",
-#      ylab = "Order option 3",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# plot(row_mean_2, row_mean_3, 
-#      xlab = "Order option 2",
-#      ylab = "Order option 3",
-#      main = "Batch 1")
-# lines(x = c(0,100), y = c(0,100), col = "red", lwd = 2)
-# 
-
 
 ########## combine batch 1, batch 2, batch3, batch 4 without correction
 #########################################################
@@ -675,14 +367,15 @@ ncol_list = c(ncol(logcounts_1), ncol(logcounts_2),
 # option 1
 list_1 = c(1,2,3,4)
 batch_num_list_1 = ncol_list[list_1]
-meta_list_1 = c(batch1_meta[,2], 
-                batch2_meta[,2],
-                batch3_meta[,2],
-                batch4_meta[,2])
-batch_info_1 = c(batch1_meta$batch,
-                 batch2_meta$batch,
-                 batch3_meta$batch,
-                 batch4_meta$batch)
+meta_list_1 = factor(c(batch1_meta[,2], 
+                       batch2_meta[,2],
+                       batch3_meta[,2],
+                       batch4_meta[,2]))
+batch_info_1 =factor(rep(c(1,2,3,4), 
+                         c(ncol(logcounts_1), 
+                           ncol(logcounts_2),
+                           ncol(logcounts_3),
+                           ncol(logcounts_4))))
 option1 <- four_func(logcounts_1,
                      logcounts_2,
                      logcounts_3,
@@ -702,16 +395,18 @@ out1 = option1$out
 
 
 # option 2
+# option 2
 list_2 = c(4,1,2,3)
 batch_num_list_2 = ncol_list[list_2]
-meta_list_2 = c(batch4_meta[,2], 
-                batch1_meta[,2],
-                batch2_meta[,2],
-                batch3_meta[,2])
-batch_info_2 = c(batch4_meta$batch,
-                 batch1_meta$batch,
-                 batch2_meta$batch,
-                 batch3_meta$batch)
+meta_list_2 = factor(c(batch4_meta[,2], 
+                       batch1_meta[,2],
+                       batch2_meta[,2],
+                       batch3_meta[,2]))
+batch_info_2 = factor(rep(c(4,1,2,3), 
+                          c(ncol(logcounts_4), 
+                            ncol(logcounts_1),
+                            ncol(logcounts_2),
+                            ncol(logcounts_3))))
 option2 <- four_func(logcounts_4,
                      logcounts_1,
                      logcounts_2,
@@ -732,14 +427,15 @@ out2 = option2$out
 # option 3
 list_3 = c(3,4,2,1)
 batch_num_list_3 = ncol_list[list_3]
-meta_list_3 = c(batch3_meta[,2], 
-                batch4_meta[,2],
-                batch2_meta[,2],
-                batch1_meta[,2])
-batch_info_3 = c(batch3_meta$batch,
-                 batch4_meta$batch,
-                 batch2_meta$batch,
-                 batch1_meta$batch)
+meta_list_3 = factor(c(batch3_meta[,2], 
+                       batch4_meta[,2],
+                       batch2_meta[,2],
+                       batch1_meta[,2]))
+batch_info_3 = factor(rep(c(3,4,2,1), 
+                          c(ncol(logcounts_3), 
+                            ncol(logcounts_4),
+                            ncol(logcounts_2),
+                            ncol(logcounts_1))))
 option3 <- four_func(logcounts_3,
                      logcounts_4,
                      logcounts_2,

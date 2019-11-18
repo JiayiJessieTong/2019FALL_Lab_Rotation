@@ -382,10 +382,15 @@ row.names(batch1234_tsne_count_matrix) = as.character(c(1:ngenes))
 
 r = seurat_workflow(count_matrix = batch1234_tsne_count_matrix,
                     cellType_info =
-                      c(batch1_meta[,2], batch2_meta[,2],
-                        batch3_meta[,2], batch4_meta[,2]) - 1,
-                    batch_info = c(batch1_meta$batch, batch2_meta$batch,
-                                   batch3_meta$batch, batch4_meta$batch))
+                      factor(c(batch1_meta[,2], 
+                               batch2_meta[,2],
+                               batch3_meta[,2],
+                               batch4_meta[,2])),
+                    batch_info = factor(rep(c(1,2,3,4), 
+                                            c(ncol(logcounts_1), 
+                                              ncol(logcounts_2),
+                                              ncol(logcounts_3),
+                                              ncol(logcounts_4)))))
 grid.newpage()
 grid.draw(r$plot)
 ```
@@ -440,14 +445,15 @@ ncol_list = c(ncol(logcounts_1), ncol(logcounts_2),
 # option 1
 list_1 = c(1,2,3,4)
 batch_num_list_1 = ncol_list[list_1]
-meta_list_1 = c(batch1_meta[,2], 
-                batch2_meta[,2],
-                batch3_meta[,2],
-                batch4_meta[,2])
-batch_info_1 = c(batch1_meta$batch,
-                 batch2_meta$batch,
-                 batch3_meta$batch,
-                 batch4_meta$batch)
+meta_list_1 = factor(c(batch1_meta[,2], 
+                       batch2_meta[,2],
+                       batch3_meta[,2],
+                       batch4_meta[,2]))
+batch_info_1 =factor(rep(c(1,2,3,4), 
+                         c(ncol(logcounts_1), 
+                           ncol(logcounts_2),
+                           ncol(logcounts_3),
+                           ncol(logcounts_4))))
 option1 <- four_func(logcounts_1,
                      logcounts_2,
                      logcounts_3,
@@ -474,14 +480,15 @@ out1 = option1$out
 # option 2
 list_2 = c(4,1,2,3)
 batch_num_list_2 = ncol_list[list_2]
-meta_list_2 = c(batch4_meta[,2], 
+meta_list_2 = factor(c(batch4_meta[,2], 
                 batch1_meta[,2],
                 batch2_meta[,2],
-                batch3_meta[,2])
-batch_info_2 = c(batch4_meta$batch,
-                 batch1_meta$batch,
-                 batch2_meta$batch,
-                 batch3_meta$batch)
+                batch3_meta[,2]))
+batch_info_2 = factor(rep(c(4,1,2,3), 
+                         c(ncol(logcounts_4), 
+                           ncol(logcounts_1),
+                           ncol(logcounts_2),
+                           ncol(logcounts_3))))
 option2 <- four_func(logcounts_4,
                      logcounts_1,
                      logcounts_2,
@@ -509,14 +516,15 @@ out2 = option2$out
 # option 3
 list_3 = c(3,4,2,1)
 batch_num_list_3 = ncol_list[list_3]
-meta_list_3 = c(batch3_meta[,2], 
+meta_list_3 = factor(c(batch3_meta[,2], 
                 batch4_meta[,2],
                 batch2_meta[,2],
-                batch1_meta[,2])
-batch_info_3 = c(batch3_meta$batch,
-                 batch4_meta$batch,
-                 batch2_meta$batch,
-                 batch1_meta$batch)
+                batch1_meta[,2]))
+batch_info_3 = factor(rep(c(3,4,2,1), 
+                         c(ncol(logcounts_3), 
+                           ncol(logcounts_4),
+                           ncol(logcounts_2),
+                           ncol(logcounts_1))))
 option3 <- four_func(logcounts_3,
                      logcounts_4,
                      logcounts_2,
