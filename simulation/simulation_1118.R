@@ -91,7 +91,7 @@ extract_batch <- function(true_counts_res, ngenes,
 }
 
 # create data
-ngenes = 500
+ngenes = 2000
 ncells_total = 2000
 true_counts_res <- SimulateTrueCounts(ncells_total=ncells_total,
                                       min_popsize=200, #number of cells in the rarest population

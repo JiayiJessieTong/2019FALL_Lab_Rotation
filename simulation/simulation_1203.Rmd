@@ -1,0 +1,682 @@
+---
+title: "2019 Fall Rotation Simulation"
+author: "Jiayi (Jessie) Tong"
+date: "12/01/2019"
+output: html_document
+---
+### Aim of this file
+
+This R markdown file is written to simulate the single-cell data to demonstrate if the order of the batch when applying mutual nearest neighbors (MNN) would affect the clustering results. 
+
+### Simulation Design
+
+In this simulation study, we are going to simulate four different batches to mimic the temporal from week 0 to week 24. As time goes on, the observed cell population increases. In Figure 1, we present the idea of the simulated data. In each batch, there are different numbers of cell populations: 3, 4, 5, and 7. There exist batch effects among the cell populations 1, 2, 3, 4 and 5 across four batches.   
+
+
+![Figure 1](/Users/jiayito/Dropbox/000_Penn_Phd/2019_Fall/2019_Fall_Rotation/simulation/sim_design.png)
+
+### R package to be used: Symsim
+
+To simulate the data, we are going to use Symsim package, which is one most recently published R package for simulating multiple faceted variability in single cell RND sequencing data.
+
+```{r "setup", include=FALSE}
+require("knitr")
+require(gridExtra)
+# Install SymSim
+library("devtools")
+# devtools::install_github("YosefLab/SymSim")
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#   install.packages("BiocManager")
+# BiocManager::install("batchelor")
+# BiocManager::install("scater")
+library("devtools")
+library("SymSim")
+library("ape")
+library(batchelor)
+library(scater)
+library(Rtsne)
+library(pracma)
+library(Seurat)
+library(gridExtra)
+library(randomcoloR)
+library(gtools)
+library(CrossClustering)
+opts_chunk$set(fig.width=4, fig.height=3)
+
+# function to extract batch
+extract_batch <- function(true_counts_res, ngenes,
+                          id_list, num_batch, 
+                          alpha_mean, alpha_sd,
+                          depth_mean, depth_sd){
+  
+  data(gene_len_pool)
+  
+  # extract the population with the id I want
+  id = c(true_counts_res[[3]]$pop %in% id_list)
+  
+  # extract the meta_cell info with the id
+  meta_cell = true_counts_res[[3]][id,]
+  
+  # extract the true_counts info with the id
+  true_counts = true_counts_res[[1]][,id]
+  
+  # get the observed counts with function True2ObservedCounts
+  # num_batch is the number of batches that the id_list (cell population) has
+  gene_len <- sample(gene_len_pool, ngenes, replace = FALSE)
+  
+  observed_counts <- True2ObservedCounts(true_counts=true_counts,
+                                         meta_cell=meta_cell,
+                                         protocol="UMI",
+                                         alpha_mean=alpha_mean,
+                                         alpha_sd=alpha_sd,
+                                         gene_len=gene_len,
+                                         depth_mean=depth_mean,
+                                         depth_sd=depth_sd,
+                                         nbatch = num_batch)
+  
+  
+  return(observed_counts)
+}
+
+#### seurat workflow function
+#### seurat workflow function
+seurat_workflow <- function(count_matrix, cellType_info, batch_info){
+  data_seurat <- CreateSeuratObject(counts = count_matrix,
+                                    min.cells = 3, min.features = 10)
+  data_seurat <- NormalizeData(data_seurat)
+  data_seurat <- ScaleData(data_seurat)
+  data_seurat <- FindVariableFeatures(data_seurat, selection.method = "vst", nfeatures = 2000)
+  data_seurat <- RunPCA(data_seurat, features = VariableFeatures(object = data_seurat))
+  data_seurat <- FindNeighbors(data_seurat, dims = 1:10)
+  data_seurat <- FindClusters(data_seurat, resolution = 0.5)
+  data_seurat <- RunUMAP(data_seurat, dims = 1:10)
+  
+  n1 = length(levels(data_seurat@meta.data[["RNA_snn_res.0.5"]]))
+  c1 = distinctColorPalette(n1)
+  
+  # clustering
+  p1 = DimPlot(data_seurat, reduction = "umap", cols = c1)
+  
+  # based on real cell type
+  data_seurat$CellType = Idents(data_seurat)
+  Idents(data_seurat) <- cellType_info
+  n2 = length(unique(Idents(data_seurat)))
+  c2 = distinctColorPalette(n2)
+  p2 = DimPlot(data_seurat, reduction = "umap", cols = c2)
+  
+  # based on batch
+  data_seurat$Batch = Idents(data_seurat)
+  Idents(data_seurat) = batch_info
+  n3 = length(unique(Idents(data_seurat)))
+  c3 = distinctColorPalette(n3)
+  p3 = DimPlot(data_seurat, reduction = "umap", cols = c3)
+  
+  plot <- arrangeGrob(p1, p2, p3, nrow = 1)
+  
+  return(list(plot = plot, cluster = data_seurat$seurat_clusters))
+}
+
+```
+
+\newpage
+
+### Simulation
+
+### Step I: generate true counts data including 7 cell populations
+```{r  echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=4,fig.height=4}
+# create data
+ngenes = 500
+ncells_total = 2000
+true_counts_res <- SimulateTrueCounts(ncells_total=ncells_total,
+                                      min_popsize=200, #number of cells in the rarest population
+                                      randseed = 0, # random seed to reproduce the results
+                                      ngenes=ngenes, # number of genes
+                                      phyla=rtree(7),
+                                      evf_type="discrete",
+                                      scale_s = 0.9,
+                                      nevf=100,
+                                      Sigma=0.5,
+                                      n_de_evf=50)
+## plotting
+# plot cells
+tsne_true_counts <- PlotTsne(meta=true_counts_res[[3]],
+                             data=log2(true_counts_res[[1]]+1),
+                             evf_type="discrete",
+                             n_pc=20, label='pop',
+                             saving = F,
+                             plotname="Total - 7 pops")
+
+# plot of true counts with 7 different cells population
+tsne_true_counts[[2]]
+```
+
+#### The proportion of zeroes in the true counts data: 
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+## print the proprotion of zeroes in the true counts data
+sum(true_counts_res[[1]] == 0)/(ngenes * ncells_total)
+```
+
+#### The number of cells in each population:
+```{r echo=FALSE,warning=FALSE,message=FALSE}
+# extract cell-meta from true_counts_res
+cell_meta = true_counts_res$cell_meta
+
+# Pooled data: check the number of cells in each population
+print(table(cell_meta[,2]))
+```
+
+\newpage
+
+### Step II: Create cells population and 4 different batches (TSNE plots based on batch and cell type):
+
+#### Bacth 1: proportion of zeroes; proportion of counts > 5; cells plots
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+#### create cells population
+pop123 = extract_batch(true_counts_res, ngenes,
+                       c(1,2,3), 4, 
+                       alpha_mean = 0.05, alpha_sd = 0.02,
+                       depth_mean = 4e4, depth_sd = 3e3)
+pop4 = extract_batch(true_counts_res, ngenes,
+                     c(4), 3, 
+                     alpha_mean = 0.01, alpha_sd = 0.05,
+                     depth_mean = 1e4, depth_sd = 3e3)
+pop5 = extract_batch(true_counts_res, ngenes,
+                     c(5), 2, 
+                     alpha_mean = 0.1, alpha_sd = 0.03,
+                     depth_mean = 2e3, depth_sd = 3e3)
+pop67 = extract_batch(true_counts_res, ngenes,
+                      c(6,7), 1, 
+                      alpha_mean = 0.06, alpha_sd = 0.01,
+                      depth_mean = 5e4, depth_sd = 3e3)
+
+########################################
+# Bacth one: with three cell populations
+batch1_id = which(pop123$cell_meta$batch == 1)
+batch1_meta = pop123[[2]][batch1_id,]
+batch1_count = pop123[[1]][,batch1_id]
+
+## print the proprotion of zeroes in the observed data
+sum(batch1_count == 0)/(dim(batch1_count)[1] * dim(batch1_count)[2])
+
+## print the proportion of counts > 5
+sum(batch1_count > 5) / length(batch1_count)
+
+# # proportion of each population: number of cells in each pop / total number of cells
+# print(paste("The proportions of three cells pop are",
+#             round(table(batch1_meta$pop) / dim(batch1_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch1_sce <- SingleCellExperiment(
+  assays = list(counts = batch1_count,
+                logcounts = log2(batch1_count+1))
+) 
+
+batch1_tsne <- runTSNE(batch1_sce)
+batch1_tsne$batch <- factor(rep(c(1), dim(batch1_sce)[2]))
+batch1_tsne$cell_type <- factor(batch1_meta[,2])
+plotTSNE(batch1_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch1_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+```
+
+\newpage
+
+#### Bacth 2: proportion of zeroes; proportion of counts > 5; cells plots
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth two: with four cell populations
+batch2_id = which(pop123$cell_meta$batch == 2)
+batch2_id_2 = which(pop4$cell_meta$batch == 1)
+batch2_meta = rbind(pop123[[2]][batch2_id,], pop4[[2]][batch2_id_2,])
+batch2_count = cbind(pop123[[1]][,batch2_id], pop4[[1]][,batch2_id_2])
+
+## print the proprotion of zeroes in the observed data
+sum(batch2_count == 0)/(dim(batch2_count)[1] * dim(batch2_count)[2])
+
+## print the proportion of counts > 5
+sum(batch2_count > 5) / length(batch2_count)
+
+# proportion of each population: number of cells in each pop / total number of cells
+# print(paste("The proportions of four cells pop are",
+#             round(table(batch2_meta$pop) / dim(batch2_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch2_sce <- SingleCellExperiment(
+  assays = list(counts = batch2_count,
+                logcounts = log2(batch2_count+1))
+) 
+
+batch2_tsne <- runTSNE(batch2_sce)
+batch2_tsne$batch <- factor(rep(c(2), dim(batch2_sce)[2]))
+batch2_tsne$cell_type <- factor(batch2_meta[,2])
+plotTSNE(batch2_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch2_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+```
+
+\newpage
+
+#### Bacth 3: proportion of zeroes; proportion of counts > 5; cells plots
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth three: with five cell populations
+batch3_id = which(pop123$cell_meta$batch == 3)
+batch3_id_2 = which(pop4$cell_meta$batch == 2)
+batch3_id_3 = which(pop5$cell_meta$batch == 1)
+batch3_meta = rbind(pop123[[2]][batch3_id,],
+                    pop4[[2]][batch3_id_2,],
+                    pop5[[2]][batch3_id_3,])
+batch3_count = cbind(pop123[[1]][,batch3_id],
+                     pop4[[1]][,batch3_id_2],
+                     pop5[[1]][,batch3_id_3])
+
+## print the proprotion of zeroes in the observed data
+sum(batch3_count == 0)/(dim(batch3_count)[1] * dim(batch3_count)[2])
+
+## print the proportion of counts > 5
+sum(batch3_count > 5) / length(batch3_count)
+
+
+# proportion of each population: number of cells in each pop / total number of cells
+# print(paste("The proportions of five cells pop are",
+#             round(table(batch3_meta$pop) / dim(batch3_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch3_sce <- SingleCellExperiment(
+  assays = list(counts = batch3_count,
+                logcounts = log2(batch3_count+1))
+) 
+
+batch3_tsne <- runTSNE(batch3_sce)
+batch3_tsne$batch <- factor(rep(c(3), dim(batch3_sce)[2]))
+batch3_tsne$cell_type <- factor(batch3_meta[,2])
+plotTSNE(batch3_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch3_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+```
+
+\newpage
+
+#### Bacth 4: proportion of zeroes; proportion of counts > 5; cells plots
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+########################################
+# Bacth four: with seven cell populations
+batch4_id = which(pop123$cell_meta$batch == 4)
+batch4_id_2 = which(pop4$cell_meta$batch == 3)
+batch4_id_3 = which(pop5$cell_meta$batch == 2)
+batch4_id_4 = which(pop67$cell_meta$batch == 1)
+batch4_meta = rbind(pop123[[2]][batch4_id,],
+                    pop4[[2]][batch4_id_2,],
+                    pop5[[2]][batch4_id_3,],
+                    pop67[[2]][batch4_id_4,])
+batch4_count = cbind(pop123[[1]][,batch4_id],
+                     pop4[[1]][,batch4_id_2],
+                     pop5[[1]][,batch4_id_3],
+                     pop67[[1]][,batch4_id_4])
+## print the proprotion of zeroes in the observed data
+sum(batch4_count == 0)/(dim(batch4_count)[1] * dim(batch4_count)[2])
+
+## print the proportion of counts > 5
+sum(batch4_count > 5) / length(batch4_count)
+
+# proportion of each population: number of cells in each pop / total number of cells
+# print(paste("The proportions of seven cells pop are",
+#             round(table(batch4_meta$pop) / dim(batch4_meta)[1],2)))
+
+### signle cell experinment to plot cells
+batch4_sce <- SingleCellExperiment(
+  assays = list(counts = batch4_count,
+                logcounts = log2(batch4_count+1))
+) 
+
+batch4_tsne <- runTSNE(batch4_sce)
+batch4_tsne$batch <- factor(rep(c(4), dim(batch4_sce)[2]))
+batch4_tsne$cell_type <- factor(batch4_meta[,2])
+plotTSNE(batch4_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch4_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+```
+
+\newpage
+
+### Step III: apply MNN method with different orders to the data. Compare the clustering analysis results without and with MNN when combining batch 1, 2, 3, and 4. 
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+########################################################
+################ MNN ####################################
+#########################################################
+logcounts_1 <- log2(batch1_count + 1)
+logcounts_2 <- log2(batch2_count + 1)
+logcounts_3 <- log2(batch3_count + 1)
+logcounts_4 <- log2(batch4_count + 1)
+```
+
+#### Without correction
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+########## combine batch 1, batch 2, batch3, batch 4 without correction
+#########################################################
+########## WITHOUT CORRECTION
+#########################################################
+batch1234_sce <- SingleCellExperiment(
+  assays = list(counts = cbind(batch1_count, batch2_count, batch3_count,
+                               batch4_count),
+                logcounts = log2(cbind(batch1_count, batch2_count, 
+                                       batch3_count, batch4_count)+1))
+) 
+
+
+# tsne
+batch1234_tsne <- runTSNE(batch1234_sce)
+batch1234_tsne$batch <- factor(rep(c(1,2,3,4), 
+                                   c(ncol(logcounts_1), 
+                                     ncol(logcounts_2),
+                                     ncol(logcounts_3),
+                                     ncol(logcounts_4))))
+batch1234_tsne$cell_type <- factor(c(batch1_meta[,2], 
+                                     batch2_meta[,2],
+                                     batch3_meta[,2],
+                                     batch4_meta[,2]))
+plotTSNE(batch1234_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+plotTSNE(batch1234_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+
+```
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+# clustering analysis
+batch1234_tsne_count_matrix = batch1234_tsne@assays@data@listData[["counts"]]
+colnames(batch1234_tsne_count_matrix) = as.character(c(1:dim(batch1234_tsne_count_matrix)[2]))
+row.names(batch1234_tsne_count_matrix) = as.character(c(1:ngenes))
+# seurat_workflow(count_matrix = batch1234_tsne_count_matrix)
+
+r = seurat_workflow(count_matrix = batch1234_tsne_count_matrix,
+                    cellType_info =
+                      factor(c(batch1_meta[,2], 
+                               batch2_meta[,2],
+                               batch3_meta[,2],
+                               batch4_meta[,2])),
+                    batch_info = factor(rep(c(1,2,3,4), 
+                                            c(ncol(logcounts_1), 
+                                              ncol(logcounts_2),
+                                              ncol(logcounts_3),
+                                              ncol(logcounts_4)))))
+grid.newpage()
+grid.draw(r$plot)
+```
+
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+# #########################################################
+# ########## WITH CORRECTION： MNN
+# #########################################################
+# function
+four_func <- function(l1, l2, l3, l4,
+                      batch_list,
+                      batch_num_list,
+                      batch_meta_list,
+                      batch_info){
+  out <- mnnCorrect(l1, l2, l3, l4)
+  counts(out) <- out@assays@data@listData[["corrected"]]
+  logcounts(out) <- log2(out@assays@data@listData[["corrected"]] + 1)
+  
+  # tsne
+  out_tsne <- runTSNE(out)
+  out_tsne$batch <- factor(rep(batch_list, batch_num_list))
+  out_tsne$cell_type <- factor(batch_meta_list)
+  plot1 = plotTSNE(out_tsne, run_args=list(perplexity = 10), colour_by = "batch")
+  plot2 = plotTSNE(out_tsne, run_args=list(perplexity = 10), colour_by = "cell_type")
+  
+  
+  # clustering analysis
+  out_count_matrix = out@assays@data@listData[["corrected"]]
+  colnames(out_count_matrix) = as.character(c(1:dim(out_count_matrix)[2]))
+  row.names(out_count_matrix) = as.character(c(1:ngenes))
+  plot3 = seurat_workflow(count_matrix = out_count_matrix,
+                          cellType_info = batch_meta_list,
+                          batch_info = batch_info)
+  
+  return(list(tsne_batch = plot1, 
+              tsne_cell_type = plot2, 
+              clustering = plot3,
+              correct_count = out_count_matrix,
+              out = out))
+}
+
+############## RUN three different options
+ncol_list = c(ncol(logcounts_1), ncol(logcounts_2), 
+              ncol(logcounts_3), ncol(logcounts_4))
+```
+
+#### Possible permutations of four batches
+```{r}
+######
+perm_table = permutations(n = 4, r = 4, v = 1:4)
+perm_table
+```
+
+\newpage
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+with_correction <- function(order){
+  batch_num_list = ncol_list[order]
+  
+  # logcoutn
+  logcounts_list = list(logcounts_1, logcounts_2, logcounts_3, logcounts_4)
+  logcounts_input = logcounts_list[order]
+  
+  # meta
+  meta_full = list(batch1_meta[,2], 
+                   batch2_meta[,2],
+                   batch3_meta[,2],
+                   batch4_meta[,2])
+  meta_list = factor(unlist(meta_full[order]))
+  
+  # batch info
+  batch_info =factor(rep(order,ncol_list[order]))
+  
+  # function
+  option <- four_func(l1 = logcounts_input[[1]],
+                      l2 = logcounts_input[[2]],
+                      l3 = logcounts_input[[3]],
+                      l4 = logcounts_input[[4]],
+                      batch_list = order,
+                      batch_num_list = batch_num_list,
+                      batch_meta_list = meta_list,
+                      batch_info = batch_info)
+  
+  return(option)
+}
+```
+
+#### With correction: Order 1 `r perm_table[1,]`
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=8,fig.height=6}
+# out_corrected_list = list()
+# for (i in 1:3){
+#   option = with_correction(as.numeric(perm_table[i,]))
+#   option$tsne_batch
+#   option$tsne_cell_type
+#   r = option$clustering
+#   grid.newpage()
+#   grid.draw(r$plot)
+#   out = option$out
+#   out_corrected <- out1@assays@data@listData[["corrected"]]
+#   
+#   perc_entries_smaller_than_zero = round(sum(out1_corrected < 0)/length(out1_corrected),2)
+#   print(paste("perc of entries < 0 in the corrected matrix", perc_entries_smaller_than_zero))
+#   
+#   plot(apply(out1_corrected, 1, mean))
+#   
+#   perc_smaller_than_zero = length(which(apply(out1_corrected, 1, mean) < 0))/length(apply(out1_corrected, 1, mean))
+#   print(paste("perc of row mean < 0 in gene expression", perc_smaller_than_zero))
+#   out_corrected_list[[i]] = out_corrected
+# }
+option1 = with_correction(as.numeric(perm_table[1,]))
+option1$tsne_batch
+option1$tsne_cell_type
+```
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+r = option1$clustering
+grid.newpage()
+grid.draw(r$plot)
+out1 = option1$out
+out1_corrected <- out1@assays@data@listData[["corrected"]]
+sum(out1_corrected < 0)/length(out1_corrected)
+plot(apply(out1_corrected, 1, mean))
+length(which(apply(out1_corrected, 1, mean) < 0))/length(apply(out1_corrected, 1, mean))
+```
+
+
+#### With correction: Order 2 `r perm_table[15,]`
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+# option 2
+option2 = with_correction(as.numeric(perm_table[15,]))
+option2$tsne_batch
+option2$tsne_cell_type
+```
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+r = option2$clustering
+grid.newpage()
+grid.draw(r$plot)
+out2 = option2$out
+out2_corrected <- out2@assays@data@listData[["corrected"]]
+sum(out2_corrected < 0)/length(out2_corrected)
+plot(apply(out2_corrected, 1, mean))
+length(which(apply(out2_corrected, 1, mean) < 0))/length(apply(out2_corrected, 1, mean))
+```
+
+\newpage
+
+#### With correction: Order 3 `r perm_table[23,]`
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+# option 3
+option3 = with_correction(as.numeric(perm_table[23,]))
+option3$tsne_batch
+option3$tsne_cell_type
+```
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+r = option3$clustering
+grid.newpage()
+grid.draw(r$plot)
+out3 = option3$out
+out3_corrected <- out3@assays@data@listData[["corrected"]]
+sum(out3_corrected < 0)/length(out3_corrected)
+plot(apply(out3_corrected, 1, mean))
+length(which(apply(out3_corrected, 1, mean) < 0))/length(apply(out3_corrected, 1, mean))
+```
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+r = option2$clustering
+grid.newpage()
+grid.draw(r$plot)
+out2 = option2$out
+out2_corrected <- out2@assays@data@listData[["corrected"]]
+sum(out2_corrected < 0)/length(out2_corrected)
+plot(apply(out2_corrected, 1, mean))
+length(which(apply(out2_corrected, 1, mean) < 0))/length(apply(out2_corrected, 1, mean))
+```
+
+\newpage
+
+#### With correction: Order 4 `r perm_table[2,]`
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=4}
+# option 4
+option4 = with_correction(as.numeric(perm_table[2,]))
+option4$tsne_batch
+option4$tsne_cell_type
+```
+
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=12,fig.height=6}
+r = option4$clustering
+grid.newpage()
+grid.draw(r$plot)
+out4 = option4$out
+out4_corrected <- out4@assays@data@listData[["corrected"]]
+sum(out4_corrected < 0)/length(out4_corrected)
+plot(apply(out4_corrected, 1, mean))
+length(which(apply(out3_corrected, 1, mean) < 0))/length(apply(out4_corrected, 1, mean))
+```
+\newpage
+
+### Step IV: check similarity between different orders (with average gene expression, which is the row mean of the correct count matrix)
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=6}
+corr_list_12 = c()
+corr_list_13 = c()
+corr_list_23 = c()
+corr_list_14 = c()
+for (i in 1:dim(out1_corrected)[1]){
+  corr_list_12[i] = cor(out1_corrected[,i], out2_corrected[,i])
+  corr_list_13[i] = cor(out1_corrected[,i], out3_corrected[,i])
+  corr_list_23[i] = cor(out2_corrected[,i], out3_corrected[,i])
+  corr_list_14[i] = cor(out1_corrected[,i], out4_corrected[,i])
+}
+boxplot(corr_list_12, corr_list_13, corr_list_23, corr_list_14,
+        xaxt = "n", main = "Correlation between cells from two different orders")
+axis(1, at=1:4, labels =  c("1 vs 2",
+                            "1 vs 3",
+                            "2 vs 3",
+                            "1 vs 4"))
+
+```
+
+\newpage
+
+### Step V: calculate ARI (adjusted rank index): ARI >= 0.90 excellent recovery; 0.80 =< ARI < 0.90 good recovery; 0.65 =< ARI < 0.80 moderate recovery; ARI < 0.65 poor recovery.
+```{r echo=FALSE,warning=FALSE,message=FALSE,fig.align='center',fig.width=6,fig.height=6}
+##### option 1
+# option1's true type
+cell_type_1= c(batch1_meta[,2], 
+               batch2_meta[,2],
+               batch3_meta[,2],
+               batch4_meta[,2])
+# option1 cluster
+cluster_1 = as.numeric(option1$clustering$cluster)
+
+t = data.frame(t(rbind(cell_type_1,cluster_1)))
+ari_input = table(t$cell_type_1, t$cluster_1)
+ari1 = ari(ari_input, alpha = 0.05, digits = 2)$ari
+ari1
+
+##### option 2
+# option2's true type
+cell_type_2= c(batch3_meta[,2], 
+               batch2_meta[,2],
+               batch1_meta[,2],
+               batch4_meta[,2])
+# option2 cluster
+cluster_2 = as.numeric(option2$clustering$cluster)
+
+t = data.frame(t(rbind(cell_type_2,cluster_2)))
+ari_input = table(t$cell_type_2, t$cluster_2)
+ari2 = ari(ari_input, alpha = 0.05, digits = 2)$ari
+ari2
+
+##### option 3
+# option3's true type
+cell_type_3= c(batch4_meta[,2], 
+               batch3_meta[,2],
+               batch1_meta[,2],
+               batch2_meta[,2])
+# option3 cluster
+cluster_3 = as.numeric(option3$clustering$cluster)
+
+t = data.frame(t(rbind(cell_type_3,cluster_3)))
+ari_input = table(t$cell_type_3, t$cluster_3)
+ari3 = ari(ari_input, alpha = 0.05, digits = 2)$ari
+ari3
+
+##### option 4
+# option4s true type
+cell_type_4= c(batch1_meta[,2], 
+               batch2_meta[,2],
+               batch4_meta[,2],
+               batch3_meta[,2])
+# option4 cluster
+cluster_4 = as.numeric(option4$clustering$cluster)
+
+t = data.frame(t(rbind(cell_type_4,cluster_4)))
+ari_input = table(t$cell_type_4, t$cluster_4)
+ari4 = ari(ari_input, alpha = 0.05, digits = 2)$ari
+ari4
+```
+### References:
+
+Haghverdi, Laleh, et al. "Batch effects in single-cell RNA-sequencing data are corrected by matching mutual nearest neighbors." Nature biotechnology 36.5 (2018): 421.
+
+Zhang, Xiuwei, Chenling Xu, and Nir Yosef. "Simulating multiple faceted variability in single cell RNA sequencing." Nature communications 10.1 (2019): 2611.
